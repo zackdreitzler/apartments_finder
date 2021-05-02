@@ -53,6 +53,7 @@ if __name__ == '__main__':
 
     num_pages = get_num_pages(page_contents)
     apartments_dict_list = get_apartments_list(page_contents, [])
-    for num in range(2, num_pages+1):
-        page_contents = request_page(default_url+f'{num}/', default_headers)
-        apartments_dict_list = get_apartments_list(page_contents, apartments_dict_list)
+    print(apartments_dict_list[0])
+    # for num in range(2, num_pages+1):
+    #     page_contents = request_page(default_url+f'{num}/', default_headers)
+    #     apartments_dict_list = get_apartments_list(page_contents, apartments_dict_list)
