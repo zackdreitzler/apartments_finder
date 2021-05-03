@@ -5,11 +5,14 @@ __version__ = '0.0.1'
 __status__ = 'Prototype'
 
 import json
+
+import pandas as pd
 import requests
+import pandas
 
 from bs4 import BeautifulSoup
 
-DEFAULT_URL = 'https://www.apartments.com/philadelphia-pa/'
+DEFAULT_URL = 'https://www.apartments.com/philadelphia-pa/max-1-bedrooms-under-1200-pet-friendly-cat/air-conditioning/?sfmin=500'
 DEFAULT_HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0'}
 
 
@@ -64,6 +67,29 @@ def consume_apartments_list(apartments_dict_list, apartments_data_dict):
         url_with_additional_info = apartment['url']
         apartment_page = request_page(url_with_additional_info, DEFAULT_HEADERS)
 
+        # Get policies of this property
+        policies = apartment_page.find_all(lambda tag: tag.name == 'div' and tag.get('class') == ['feespolicies'])
+        string_of_all_policies = ''
+        for policy in policies:
+            policy_header = policy.find('h4').contents[0].upper()
+            policy_details = policy.find_all(lambda tag: tag.name == 'div'
+                                                        and tag.get('class') in [['column'], ['column-right']])
+            policy_list = [detail for detail_list in [detail.contents for detail in policy_details] for detail in detail_list]
+
+            policy_list_combined = policy_list
+            if len(policy_list) >= 2:
+                policy_list_combined = [f"{head}: {fee}" for head, fee in zip(policy_list[::2], policy_list[1::2])]
+            policy_str = f"{policy_header} " + ', '.join(policy_list_combined)
+            string_of_all_policies += f'    {policy_str}'
+
+        # Get website URL
+        website_tag = apartment_page.find_all((lambda tag: tag.name == 'a' and tag.get('title') == 'View Property Website'))
+        website = None
+        try:
+            website = website_tag[0].get('href')
+        except IndexError:
+            print(f'A URL does not exist for {name}, {website_tag}')
+
         floorplans = apartment_page.find_all(lambda tag: tag.name == 'div'
                                                          and tag.get('class') == ['priceBedRangeInfo'])
         for floorplan in floorplans:
@@ -92,8 +118,15 @@ def consume_apartments_list(apartments_dict_list, apartments_data_dict):
                 except AttributeError:
                     # Item is not of type 'Tag'
                     pass
-            print(f"{name}, {price}, {size}, {bed}, {bath}, {address}")
-        break
+
+            apartments_data_dict['name'].append(name)
+            apartments_data_dict['price'].append(price)
+            apartments_data_dict['size'].append(size)
+            apartments_data_dict['bedrooms'].append(bed)
+            apartments_data_dict['bathrooms'].append(bath)
+            apartments_data_dict['address'].append(address)
+            apartments_data_dict['policies'].append(string_of_all_policies)
+            apartments_data_dict['website'].append(website)
 
     return apartments_data_dict
 
@@ -103,7 +136,7 @@ def get_apartmentsdotcom_data(filters=None):
         Gets apartments data from apartments.com
     :param filters: the filters to apply to the request
     :return: dictionary containing lists with the following keys;
-       'name', 'price', 'size', 'bedrooms', 'bathrooms', 'address'
+       'name', 'price', 'size', 'bedrooms', 'bathrooms', 'address', 'policies', website'
     """
     url = DEFAULT_URL
     headers = DEFAULT_HEADERS
@@ -117,13 +150,16 @@ def get_apartmentsdotcom_data(filters=None):
         , 'bedrooms': []
         , 'bathrooms': []
         , 'address': []
+        , 'policies': []
+        , 'website': []
     }
 
     page_contents = request_page(url, headers)
     num_pages = get_num_pages(page_contents)
     apartments_dict_list = get_apartments_list(page_contents)
     apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict)
-
+    apartments_as_dataframe = pd.DataFrame(apartments_data_dict)
+    apartments_as_dataframe.to_csv('test.csv', sep='#')
     # for num in range(2, num_pages+1):
     #     page_contents = request_page(url+f'{num}/', headers, filters)
     #     apartments_dict_list = get_apartments_list(page_contents, apartments_dict_list)
