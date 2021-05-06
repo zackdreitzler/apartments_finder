@@ -5,24 +5,79 @@ __version__ = '0.0.1'
 __status__ = 'Prototype'
 
 import json
-
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-DEFAULT_URL = 'https://www.apartments.com/philadelphia-pa/max-1-bedrooms-under-1200-pet-friendly-cat/air-conditioning/?sfmin=500'
+DEFAULT_URL = 'https://www.apartments.com/'
 DEFAULT_HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0'}
 
 
-def get_num_pages(page_souped):
+def build_url(location):
     """
-        This gets the number of pages to search through.
-    :param page_souped: <class 'bs4.BeautifulSoup'>, a page that has been passed through BeautifulSoup().
-    :return: int, the number of pages to search through
+        Builds out the url to use in the request.
+    :param location: string, the location to append to the url. I.E. 'Washington, DC'
+    :return: string representing the url to use.
     """
-    span_parsed = page_souped.find_all(lambda tag: tag.name == 'span' and tag.get('class') == ['pageRange'])
-    span_parsed_contents_list = span_parsed[0].contents[0].split(' ')
-    return int(span_parsed_contents_list[-1])
+    city = state = None
+    if isinstance(location, str):
+        location_parts = location.lower().split(',')
+        if len(location_parts) > 1:
+            city = location_parts[0].strip()
+            state = location_parts[1].strip()
+
+    if city is None or state is None:
+        return DEFAULT_URL
+
+    return DEFAULT_URL + city + '-' + state + '/'
+
+
+def consume_apartments_list(apartments_dict_list, apartments_data_dict, bedroom_sizes):
+    """
+        Get data from apartments in apartments_dict_list
+    :param apartments_dict_list: list, collection of dictionaries to consume.
+    :param apartments_data_dict: dict, collection of apartments data.
+    :param bedroom_sizes: list, the number of bedrooms desired.
+    :return: apartments_data_dict with new apartments appended to it.
+    """
+    for apartment in apartments_dict_list:
+        name = apartment['name']
+        address = f"{apartment['Address']['streetAddress']}, " \
+                  f"{apartment['Address']['addressLocality']}, " \
+                  f"{apartment['Address']['addressRegion']} {apartment['Address']['postalCode']}"
+
+        url_with_additional_info = apartment['url']
+        apartment_page = request_page(url_with_additional_info, DEFAULT_HEADERS)
+
+        # Get policies of this property
+        string_of_all_policies = get_policies(apartment_page)
+
+        # Get website URL
+        website = get_website(apartment_page)
+
+        # Get each floorplan and append to the data dictionary
+        filtered_beds = ['bed'+str(bedroom) for bedroom in bedroom_sizes]
+
+        floorplan_buckets = apartment_page.find_all(lambda tag: tag.name == 'div'
+                                                         and tag.get('data-tab-content-id') in filtered_beds)
+
+        for floorplan_bucket in floorplan_buckets:
+            floorplans = floorplan_bucket.find_all(lambda tag: tag.name == 'div'
+                                                             and tag.get('class') == ['priceBedRangeInfo'])
+            for floorplan in floorplans:
+
+                price, bed, bath, size = get_floorplan_details(floorplan)
+
+                apartments_data_dict['name'].append(name)
+                apartments_data_dict['price'].append(price)
+                apartments_data_dict['size'].append(size)
+                apartments_data_dict['bedrooms'].append(bed)
+                apartments_data_dict['bathrooms'].append(bath)
+                apartments_data_dict['address'].append(address)
+                apartments_data_dict['policies'].append(string_of_all_policies)
+                apartments_data_dict['website'].append(website)
+
+    return apartments_data_dict
 
 
 def get_apartments_list(page_souped):
@@ -36,17 +91,51 @@ def get_apartments_list(page_souped):
     return apartments_list
 
 
-def request_page(url, headers, timeout=5):
+def get_floorplan_details(floorplan):
     """
-        Make a GET request to the given url with the given headers and return the contents passed through BeautifulSoup.
-    :param url: string, the url to use in the request.
-    :param headers: dict, the headers to append to the HTTP request.
-    :param timeout: int, the amount of seconds to wait before timing out the request.
-    :return: the requested page passed through BeautifulSoup.
+        Get the details about the given floorplan. Such as number of bedrooms and bathrooms.
+    :param floorplan: <class 'bs4.BeautifulSoup'>, a page that has been passed through BeautifulSoup().
+    :return: the price, number of bedrooms, number of bathrooms, and square footage of the apartment
     """
-    page = requests.get(url, headers=headers, timeout=5)
-    page_souped = BeautifulSoup(page.content, 'html.parser')
-    return page_souped
+    # Get Price
+    price = floorplan.find_all(lambda tag: tag.name == 'span'
+                                           and tag.get('class') == ['rentLabel'])[0].contents[0].strip()
+
+    # Get size, bedroom number, and bathrooms number
+    bed = None
+    bath = None
+    size = None
+    floorplan_details = floorplan.find_all(lambda tag: tag.name == 'span'
+                                                       and tag.get('class') == ['detailsTextWrapper'])[0].contents
+    for floorplan_detail in floorplan_details:
+        try:
+            floorplan_detail_str = floorplan_detail.contents[0].lower()
+            if 'bed' in floorplan_detail_str:
+                bed = floorplan_detail_str
+            elif 'studio' in floorplan_detail_str:
+                bed = 'Studio'
+            if 'bath' in floorplan_detail_str:
+                bath = floorplan_detail_str
+            elif 'sq ft' in floorplan_detail_str:
+                size = floorplan_detail_str
+        except AttributeError:
+            # The item was not of type Tag
+            pass
+        except IndexError:
+            print(f'This floorplan has no details')
+            pass
+    return price, bed, bath, size
+
+
+def get_num_pages(page_souped):
+    """
+        This gets the number of pages to search through.
+    :param page_souped: <class 'bs4.BeautifulSoup'>, a page that has been passed through BeautifulSoup().
+    :return: int, the number of pages to search through
+    """
+    span_parsed = page_souped.find_all(lambda tag: tag.name == 'span' and tag.get('class') == ['pageRange'])
+    span_parsed_contents_list = span_parsed[0].contents[0].split(' ')
+    return int(span_parsed_contents_list[-1])
 
 
 def get_policies(apartment_page):
@@ -87,101 +176,30 @@ def get_website(apartment_page):
     return None
 
 
-def get_floorplan_details(floorplan):
+def request_page(url, headers, timeout=5):
     """
-        Get the details about the given floorplan. Such as number of bedrooms and bathrooms.
-    :param floorplan: <class 'bs4.BeautifulSoup'>, a page that has been passed through BeautifulSoup().
-    :return: the price, number of bedrooms, number of bathrooms, and square footage of the apartment
+        Make a GET request to the given url with the given headers and return the contents passed through BeautifulSoup.
+    :param url: string, the url to use in the request.
+    :param headers: dict, the headers to append to the HTTP request.
+    :param timeout: int, the amount of seconds to wait before timing out the request.
+    :return: the requested page passed through BeautifulSoup.
     """
-    # Get Price
-    price = floorplan.find_all(lambda tag: tag.name == 'span'
-                                           and tag.get('class') == ['rentLabel'])[0].contents[0].strip()
-
-    # Get size, bedroom number, and bathrooms number
-    bed = None
-    bath = None
-    size = None
-    floorplan_details = floorplan.find_all(lambda tag: tag.name == 'span'
-                                                       and tag.get('class') == ['detailsTextWrapper'])[0].contents
-    for floorplan_detail in floorplan_details:
-        try:
-            floorplan_detail_str = floorplan_detail.contents[0].lower()
-            if 'bed' in floorplan_detail_str:
-                bed = floorplan_detail_str
-            elif 'studio' in floorplan_detail_str:
-                bed = 'Studio'
-            if 'bath' in floorplan_detail_str:
-                bath = floorplan_detail_str
-            elif 'sq ft' in floorplan_detail_str:
-                size = floorplan_detail_str
-        except AttributeError:
-            # The item was not of type Tag
-            pass
-        except IndexError:
-            print(f'This floorplan has no details')
-            pass
-    return price, bed, bath, size
+    page = requests.get(url, headers=headers, timeout=5)
+    page_souped = BeautifulSoup(page.content, 'html.parser')
+    return page_souped
 
 
-def consume_apartments_list(apartments_dict_list, apartments_data_dict, bedroom_sizes):
+def get_apartmentsdotcom_data(filters=None, headers=DEFAULT_HEADERS):
     """
-        Get data from apartments in apartments_dict_list
-    :param apartments_dict_list: list, collection of dictionaries to consume.
-    :param apartments_data_dict: dict, collection of apartments data.
-    :param bedroom_sizes: list, the number of bedrooms desired.
-    :return: apartments_data_dict with new apartments appended to it.
-    """
-    for apartment in apartments_dict_list:
-        name = apartment['name']
-        address = f"{apartment['Address']['streetAddress']}, " \
-                  f"{apartment['Address']['addressLocality']}, " \
-                  f"{apartment['Address']['addressRegion']} {apartment['Address']['postalCode']}"
-
-        url_with_additional_info = apartment['url']
-        apartment_page = request_page(url_with_additional_info, DEFAULT_HEADERS)
-
-        # Get policies of this property
-        string_of_all_policies = get_policies(apartment_page)
-
-        # Get website URL
-        website = get_website(apartment_page)
-
-        # Get each floorplan and append to the data dictionary
-        filtered_beds = ['bed'+str(bedroom) for bedroom in bedroom_sizes]
-
-        floorplan_buckets = apartment_page.find_all(lambda tag: tag.name == 'div'
-                                                         and tag.get('data-tab-content-id') in filtered_beds)
-
-        for floorplan_bucket in floorplan_buckets:
-            floorplans = floorplan_bucket.find_all(lambda tag: tag.name == 'div'
-                                                             and tag.get('class') == ['priceBedRangeInfo'])
-            for floorplan in floorplans:
-
-                price, bed, bath, size = get_floorplan_details(apartment_page, floorplan)
-
-                apartments_data_dict['name'].append(name)
-                apartments_data_dict['price'].append(price)
-                apartments_data_dict['size'].append(size)
-                apartments_data_dict['bedrooms'].append(bed)
-                apartments_data_dict['bathrooms'].append(bath)
-                apartments_data_dict['address'].append(address)
-                apartments_data_dict['policies'].append(string_of_all_policies)
-                apartments_data_dict['website'].append(website)
-
-    return apartments_data_dict
-
-
-def get_apartmentsdotcom_data(filters=None):
-    """
-        Gets apartments data from apartments.com
-    :param filters: the filters to apply to the request
+        Gets apartments data from apartments.com.
+    :param filters: the filters to apply to the request.
+    :param headers: the HTTP headers for the request.
     :return: dictionary containing lists with the following keys;
        'name', 'price', 'size', 'bedrooms', 'bathrooms', 'address', 'policies', website'
     """
-    url = DEFAULT_URL
-    headers = DEFAULT_HEADERS
+    url = build_url('Washington, DC')
 
-    # TODO append filters to URL
+    # # TODO implement use of filters
     filters = {'bedrooms': [0, 1]}
 
     apartments_data_dict = {
@@ -200,9 +218,9 @@ def get_apartmentsdotcom_data(filters=None):
     apartments_dict_list = get_apartments_list(page_contents)
     apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, filters['bedrooms'])
 
-    for num in range(2, num_pages+1):
-        page_contents = request_page(f'https://www.apartments.com/philadelphia-pa/max-1-bedrooms-under-1200-pet-friendly-cat/air-conditioning/{num}/?sfmin=500', headers)
-        apartments_dict_list = get_apartments_list(page_contents)
-        apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, filters['bedrooms'])
+    # for num in range(2, num_pages+1):
+    #     page_contents = request_page(f'https://www.apartments.com/philadelphia-pa/max-1-bedrooms-under-1200-pet-friendly-cat/air-conditioning/{num}/?sfmin=500', headers)
+    #     apartments_dict_list = get_apartments_list(page_contents)
+    #     apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, filters['bedrooms'])
     apartments_as_dataframe = pd.DataFrame(apartments_data_dict)
     apartments_as_dataframe.to_csv('test.csv', sep='#')
