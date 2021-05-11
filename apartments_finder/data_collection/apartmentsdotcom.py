@@ -40,6 +40,7 @@ def consume_apartments_list(apartments_dict_list, apartments_data_dict, bedroom_
     :param bedroom_sizes: list, the number of bedrooms desired.
     :return: apartments_data_dict with new apartments appended to it.
     """
+
     for apartment in apartments_dict_list:
         name = apartment['name']
         address = f"{apartment['Address']['streetAddress']}, " \
@@ -80,12 +81,14 @@ def consume_apartments_list(apartments_dict_list, apartments_data_dict, bedroom_
     return apartments_data_dict
 
 
+
 def get_apartments_list(page_souped):
     """
         Takes a page that has been passed through BeautifulSoup and gets the list of results on the page.
     :param page_souped: <class 'bs4.BeautifulSoup'>, a page that has been passed through BeautifulSoup().
     :return: list of dictionaries from the given page.
     """
+
     scripts_parsed = page_souped.find_all(lambda tag: tag.name == 'script' and tag.get('type') == 'application/ld+json')
     apartments_list = json.loads(scripts_parsed[0].contents[0])['about']
     return apartments_list
@@ -133,9 +136,11 @@ def get_num_pages(page_souped):
     :param page_souped: <class 'bs4.BeautifulSoup'>, a page that has been passed through BeautifulSoup().
     :return: int, the number of pages to search through
     """
+
     span_parsed = page_souped.find_all(lambda tag: tag.name == 'span' and tag.get('class') == ['pageRange'])
     span_parsed_contents_list = span_parsed[0].contents[0].split(' ')
     return int(span_parsed_contents_list[-1])
+
 
 
 def get_policies(apartment_page):
@@ -184,8 +189,16 @@ def request_page(url, headers, timeout=5):
     :param timeout: int, the amount of seconds to wait before timing out the request.
     :return: the requested page passed through BeautifulSoup.
     """
-    page = requests.get(url, headers=headers, timeout=5)
-    page_souped = BeautifulSoup(page.content, 'html.parser')
+    try:
+        page = requests.get(url, headers=headers, timeout=timeout)
+        page_souped = BeautifulSoup(page.content, 'html.parser')
+    except requests.exceptions.MissingSchema:
+        print(f'URL: "{url}" not valid.')
+        return None
+    except requests.exceptions.ConnectionError:
+        print(f'Failed to connect to URL: "{url}".')
+        return None
+
     return page_souped
 
 
@@ -197,10 +210,9 @@ def get_apartmentsdotcom_data(filters=None, headers=DEFAULT_HEADERS):
     :return: dictionary containing lists with the following keys;
        'name', 'price', 'size', 'bedrooms', 'bathrooms', 'address', 'policies', website'
     """
-    url = build_url('Washington, DC')
 
-    # # TODO implement use of filters
-    filters = {'bedrooms': [0, 1]}
+    url = build_url(filters.get('location'))
+    bedrooms = filters.get('bedrooms')
 
     apartments_data_dict = {
         'name': []
@@ -214,13 +226,18 @@ def get_apartmentsdotcom_data(filters=None, headers=DEFAULT_HEADERS):
     }
 
     page_contents = request_page(url, headers)
-    num_pages = get_num_pages(page_contents)
-    apartments_dict_list = get_apartments_list(page_contents)
-    apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, filters['bedrooms'])
+    if page_contents:
+        num_pages = get_num_pages(page_contents)
+        apartments_dict_list = get_apartments_list(page_contents)
+        apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, bedrooms)
 
-    # for num in range(2, num_pages+1):
-    #     page_contents = request_page(f'https://www.apartments.com/philadelphia-pa/max-1-bedrooms-under-1200-pet-friendly-cat/air-conditioning/{num}/?sfmin=500', headers)
-    #     apartments_dict_list = get_apartments_list(page_contents)
-    #     apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, filters['bedrooms'])
+        for num in range(2, num_pages+1):
+            page_contents = request_page(url+f'{num}', headers)
+            apartments_dict_list = get_apartments_list(page_contents)
+            apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, bedrooms)
+
+
     apartments_as_dataframe = pd.DataFrame(apartments_data_dict)
-    apartments_as_dataframe.to_csv('test.csv', sep='#')
+    # apartments_as_dataframe.to_csv('test.csv', sep='#')
+
+    return apartments_as_dataframe
