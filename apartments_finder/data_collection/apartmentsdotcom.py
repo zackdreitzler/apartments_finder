@@ -236,8 +236,6 @@ def get_apartmentsdotcom_data(filters=None, headers=DEFAULT_HEADERS):
             apartments_dict_list = get_apartments_list(page_contents)
             apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, bedrooms)
 
-
     apartments_as_dataframe = pd.DataFrame(apartments_data_dict)
-    # apartments_as_dataframe.to_csv('test.csv', sep='#')
 
     return apartments_as_dataframe
