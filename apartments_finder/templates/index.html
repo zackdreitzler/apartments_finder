@@ -1,10 +1,27 @@
 <!DOCTYPE html>
 <html lang='en'>
-<head>
-  <meta charset="utf-8" />
-  <title>Hello world!</title>
-</head>
-<form method="get" action="/apartmentsdata">
-  <button type="submit">Get Data</button>
-</form>
+  <head>
+    <meta charset="utf-8" />
+    <title>Hello world!</title>
+  </head>
+
+  <form action="/apartmentsdata" method='POST'>
+    <label>City</label>
+    <select id="city_filter" name="city_filter">
+      {% for city in cities %}
+        <option value= {{ city }}>{{ city }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Bedrooms</label>
+    <select id="bed_filter" name="bed_filter">
+      <option value=0>Studio</option>
+      <option value=1>1 bedroom</option>
+      <option value=2>2 bedrooms</option>
+      <option value=3>3 bedrooms</option>
+    </select>
+
+    <button type="submit">Get Data</button>
+  </form>
+
 </html>
