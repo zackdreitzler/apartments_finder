@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Apartment Data</title>
-</head>
-<body>
+    <head>
+        <meta charset="UTF-8">
+        <title>Apartment Data</title>
+    </head>
+    <body>
 
-{% for table in tables %}
-            {{titles[loop.index]}}
-            {{ table|safe }}
-{% endfor %}
+    {% for table in tables %}
+                {{titles[loop.index]}}
+                {{ table|safe }}
+    {% endfor %}
 
-</body>
+    </body>
 </html>
