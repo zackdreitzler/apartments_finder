@@ -81,7 +81,6 @@ def consume_apartments_list(apartments_dict_list, apartments_data_dict, bedroom_
     return apartments_data_dict
 
 
-
 def get_apartments_list(page_souped):
     """
         Takes a page that has been passed through BeautifulSoup and gets the list of results on the page.
@@ -125,7 +124,7 @@ def get_floorplan_details(floorplan):
             # The item was not of type Tag
             pass
         except IndexError:
-            print(f'This floorplan has no details')
+            print(f'This floorplan has no details: {floorplan_detail}')
             pass
     return price, bed, bath, size
 
@@ -138,9 +137,11 @@ def get_num_pages(page_souped):
     """
 
     span_parsed = page_souped.find_all(lambda tag: tag.name == 'span' and tag.get('class') == ['pageRange'])
-    span_parsed_contents_list = span_parsed[0].contents[0].split(' ')
+    try:
+        span_parsed_contents_list = span_parsed[0].contents[0].split(' ')
+    except IndexError:
+        return 0
     return int(span_parsed_contents_list[-1])
-
 
 
 def get_policies(apartment_page):
@@ -162,7 +163,7 @@ def get_policies(apartment_page):
         if len(policy_list) >= 2:
             policy_list_combined = [f"{head}: {fee}" for head, fee in zip(policy_list[::2], policy_list[1::2])]
         policy_str = f"{policy_header} " + ', '.join(policy_list_combined)
-        string_of_all_policies += f'    {policy_str}'
+        string_of_all_policies += f'{policy_str}'
     return string_of_all_policies
 
 
@@ -177,7 +178,7 @@ def get_website(apartment_page):
         website = website_tag[0].get('href')
         return website
     except IndexError:
-        print('A URL does not exist for apartment')
+        print(f'A URL does not exist for apartment: {website_tag}')
     return None
 
 
@@ -213,7 +214,7 @@ def get_apartmentsdotcom_data(filters=None, headers=DEFAULT_HEADERS):
 
     url = build_url(filters.get('location'))
     bedrooms = filters.get('bedrooms')
-
+    print(url)
     apartments_data_dict = {
         'name': []
         , 'price': []
@@ -231,13 +232,13 @@ def get_apartmentsdotcom_data(filters=None, headers=DEFAULT_HEADERS):
         apartments_dict_list = get_apartments_list(page_contents)
         apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, bedrooms)
 
-        for num in range(2, num_pages+1):
-            page_contents = request_page(url+f'{num}', headers)
-            apartments_dict_list = get_apartments_list(page_contents)
-            apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, bedrooms)
-
+        if num_pages > 0:
+            for num in range(2, num_pages+1):
+                break
+                page_contents = request_page(url+f'{num}', headers)
+                apartments_dict_list = get_apartments_list(page_contents)
+                apartments_data_dict = consume_apartments_list(apartments_dict_list, apartments_data_dict, bedrooms)
 
     apartments_as_dataframe = pd.DataFrame(apartments_data_dict)
-    # apartments_as_dataframe.to_csv('test.csv', sep='#')
 
     return apartments_as_dataframe
