@@ -41,4 +41,20 @@ def index():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    import sys
+    debug = False
+    port = 5000
+
+    if len(sys.argv) > 3:
+        print('More that 2 arguments passed through command line. Only the first 2 arguments will be used.')
+
+    for arg in sys.argv[1:3]:
+        if arg == '-d':
+            debug = True
+        else:
+            try:
+                port = int(arg)
+            except ValueError:
+                print(f'Failed to set port to: {arg}')
+
+    app.run(debug=debug, port=port)
