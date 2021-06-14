@@ -1,4 +1,4 @@
-requests
-beautifulsoup4
-pandas
-flask
+requests==2.22.0
+beautifulsoup4==4.9.3
+pandas==1.2.4
+Flask==2.0.0
