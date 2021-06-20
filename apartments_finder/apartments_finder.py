@@ -57,4 +57,4 @@ if __name__ == '__main__':
             except ValueError:
                 print(f'Failed to set port to: {arg}')
 
-    app.run(debug=debug, port=port)
+    app.run(host='0.0.0.0', debug=debug, port=port)
